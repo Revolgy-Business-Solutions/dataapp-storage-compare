@@ -1,0 +1,71 @@
+graph LR
+    A[User Inputs & Configuration] --> B{Keboola Project Details 
+ (URL, Token)};
+    A --> C{Database Credentials 
+ (Snowflake/BigQuery)};
+    A --> D[Select Origin/Target 
+ DB Types];
+
+    B --> E[Load Buckets];
+    E --> F[Select Bucket];
+    F --> G[Load Tables];
+    G --> H[Select Table];
+
+    H --> I[Fetch Backend Info 
+ (KBC Table Details)];
+    I --> J[Display Backend Info & Column Types];
+
+    subgraph "Comparison Execution (on 'Check' button)"
+        direction LR
+        K[Get Selected KBC Table IDs] --> L{Fetch Backend Info for Origin & Target 
+ (Schema, Table Name, Columns, KBC Types)};
+        L --> M{Generate Aggregate SQL Queries 
+ (MIN, MAX, AVG, SUM, COUNT) 
+ for Numeric Columns};
+        M --> N[Display Generated SQL Queries];
+        
+        C --> O{Execute Aggregate Queries 
+ on Origin DB};
+        L --> O;
+        M --> O;
+        
+        C --> P{Execute Aggregate Queries 
+ on Target DB};
+        L --> P;
+        M --> P;
+
+        O --> Q[Store Origin Aggregate Results];
+        P --> R[Store Target Aggregate Results];
+        
+        Q --> S{Perform Comparison of Aggregates 
+ (Apply Rounding, Check Matches)};
+        R --> S;
+        L --> S;
+
+        S --> T[Display Structured Comparison Results 
+ (Overall Status, Metrics Table, Match Indicators)];
+    end
+
+    D --> O;
+    D --> P;
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#ccf,stroke:#333,stroke-width:2px
+    style C fill:#ccf,stroke:#333,stroke-width:2px
+    style D fill:#ccf,stroke:#333,stroke-width:2px
+    style E fill:#lightgrey,stroke:#333,stroke-width:2px
+    style F fill:#lightgrey,stroke:#333,stroke-width:2px
+    style G fill:#lightgrey,stroke:#333,stroke-width:2px
+    style H fill:#lightgrey,stroke:#333,stroke-width:2px
+    style I fill:#lightgreen,stroke:#333,stroke-width:2px
+    style J fill:#lightblue,stroke:#333,stroke-width:2px
+    style K fill:#lightgreen,stroke:#333,stroke-width:2px
+    style L fill:#lightgreen,stroke:#333,stroke-width:2px
+    style M fill:#lightgreen,stroke:#333,stroke-width:2px
+    style N fill:#lightblue,stroke:#333,stroke-width:2px
+    style O fill:#orange,stroke:#333,stroke-width:2px
+    style P fill:#orange,stroke:#333,stroke-width:2px
+    style Q fill:#lightyellow,stroke:#333,stroke-width:2px
+    style R fill:#lightyellow,stroke:#333,stroke-width:2px
+    style S fill:#lightgreen,stroke:#333,stroke-width:2px
+    style T fill:#lightblue,stroke:#333,stroke-width:2px

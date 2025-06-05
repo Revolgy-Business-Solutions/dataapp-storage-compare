@@ -1,0 +1,8 @@
+streamlit
+kbcstorage
+pandas
+snowflake-connector-python
+google-cloud-bigquery
+google-auth-oauthlib
+google-auth-httplib2
+db-dtypes 
