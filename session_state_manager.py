@@ -67,7 +67,7 @@ def initialize_session_state():
         st.session_state.bq_service_account_json_str_target = st.secrets.get("target_bigquery", {}).get("service_account_json_str", "")
 
     # Comparison Controls Session State
-    if 'round_numbers_checkbox' not in st.session_state: st.session_state.round_numbers_checkbox = True
+    if 'round_numbers_checkbox' not in st.session_state: st.session_state.round_numbers_checkbox = False
     if 'rounding_digits_input' not in st.session_state: st.session_state.rounding_digits_input = 2
     if 'attempt_cast_checkbox' not in st.session_state: st.session_state.attempt_cast_checkbox = False
     
@@ -78,4 +78,4 @@ def initialize_session_state():
     if 'target_agg_results' not in st.session_state: st.session_state.target_agg_results = {} # Init as dict 
 
     # For type inference notifications
-    if 'type_inference_notifications' not in st.session_state: st.session_state.type_inference_notifications = [] 
+    if 'type_inference_notifications' not in st.session_state: st.session_state.type_inference_notifications = []
