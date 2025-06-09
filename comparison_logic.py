@@ -3,6 +3,7 @@ import json # For BQ credentials if passed as string and parsed here
 import pandas as pd
 import numpy as np
 import copy
+from decimal import Decimal
 # Import helper functions if they are not passed as arguments
 # from app import get_backend_table_info, generate_aggregate_queries, ... (adjust as per actual passing mechanism)
 
@@ -34,7 +35,8 @@ def apply_rounding_and_process_comparison(
     processed_target_results = {}
 
     should_round = st.session_state.get('round_numbers_checkbox', False)
-    round_digits = st.session_state.get('rounding_digits_input', 3)
+    round_digits = st.session_state.get('rounding_digits_input', 2)
+    
 
     # Process Origin Results
     for col_name, raw_metrics_dict in raw_origin_column_aggregates.items():
@@ -44,19 +46,38 @@ def apply_rounding_and_process_comparison(
         
         parsed_and_processed_metrics = {}
         for raw_metric_key, value in raw_metrics_dict.items():
-            # E.g., min_COLNAME -> min
-            parsed_key = raw_metric_key.split(f'_{col_name}')[0].lower() if f'_{col_name}' in raw_metric_key else raw_metric_key.lower()
+            # E.g., MIN_REPORTING_CURRENCY -> min, MAX_REPORTING_CURRENCY -> max
+            # Handle both cases: min_colname and MIN_COLNAME
+            raw_key_upper = raw_metric_key.upper()
+            col_name_upper = col_name.upper()
+            
+            if f'_{col_name_upper}' in raw_key_upper:
+                parsed_key = raw_key_upper.split(f'_{col_name_upper}')[0].lower()
+            elif f'{col_name_upper}_' in raw_key_upper:
+                parsed_key = raw_key_upper.split(f'{col_name_upper}_')[1].lower()
+            else:
+                # Try to extract metric from common patterns
+                if raw_key_upper.startswith('MIN_'):
+                    parsed_key = 'min'
+                elif raw_key_upper.startswith('MAX_'):
+                    parsed_key = 'max'
+                elif raw_key_upper.startswith('AVG_'):
+                    parsed_key = 'avg'
+                elif raw_key_upper.startswith('SUM_'):
+                    parsed_key = 'sum'
+                elif raw_key_upper.startswith('COUNT_'):
+                    parsed_key = 'count'
+                else:
+                    parsed_key = raw_metric_key.lower()
             
             val_to_process = value
-            if should_round and isinstance(val_to_process, (float, np.floating, int, np.integer)):
+            original_val = value
+            if should_round and isinstance(val_to_process, (float, np.floating, int, np.integer, Decimal)):
                 try:
                     # Ensure conversion to float before rounding, especially for np types
                     float_val = float(val_to_process)
                     rounded_val = round(float_val, round_digits)
-                    if rounded_val == int(rounded_val): # Check if it's a whole number
-                        val_to_process = int(rounded_val)
-                    else:
-                        val_to_process = rounded_val
+                    val_to_process = rounded_val
                 except (ValueError, TypeError):
                     pass # Keep original if not convertible/roundable
             elif isinstance(val_to_process, (float, np.floating)) and val_to_process == int(val_to_process):
@@ -74,20 +95,41 @@ def apply_rounding_and_process_comparison(
 
         parsed_and_processed_metrics = {}
         for raw_metric_key, value in raw_metrics_dict.items():
-            parsed_key = raw_metric_key.split(f'_{col_name}')[0].lower() if f'_{col_name}' in raw_metric_key else raw_metric_key.lower()
+            # E.g., MIN_REPORTING_CURRENCY -> min, MAX_REPORTING_CURRENCY -> max
+            # Handle both cases: min_colname and MIN_COLNAME
+            raw_key_upper = raw_metric_key.upper()
+            col_name_upper = col_name.upper()
+            
+            if f'_{col_name_upper}' in raw_key_upper:
+                parsed_key = raw_key_upper.split(f'_{col_name_upper}')[0].lower()
+            elif f'{col_name_upper}_' in raw_key_upper:
+                parsed_key = raw_key_upper.split(f'{col_name_upper}_')[1].lower()
+            else:
+                # Try to extract metric from common patterns
+                if raw_key_upper.startswith('MIN_'):
+                    parsed_key = 'min'
+                elif raw_key_upper.startswith('MAX_'):
+                    parsed_key = 'max'
+                elif raw_key_upper.startswith('AVG_'):
+                    parsed_key = 'avg'
+                elif raw_key_upper.startswith('SUM_'):
+                    parsed_key = 'sum'
+                elif raw_key_upper.startswith('COUNT_'):
+                    parsed_key = 'count'
+                else:
+                    parsed_key = raw_metric_key.lower()
             
             val_to_process = value
-            if should_round and isinstance(val_to_process, (float, np.floating, int, np.integer)):
+            if should_round and isinstance(val_to_process, (float, np.floating, int, np.integer, Decimal)):
                 try:
+                    # Ensure conversion to float before rounding, especially for np types
                     float_val = float(val_to_process)
                     rounded_val = round(float_val, round_digits)
-                    if rounded_val == int(rounded_val):
-                        val_to_process = int(rounded_val)
-                    else:
-                        val_to_process = rounded_val
+                    val_to_process = rounded_val
                 except (ValueError, TypeError):
-                    pass
+                    pass # Keep original if not convertible/roundable
             elif isinstance(val_to_process, (float, np.floating)) and val_to_process == int(val_to_process):
+                # If not rounding, but it's a float that is a whole number, convert to int for consistency
                  val_to_process = int(val_to_process)
 
             parsed_and_processed_metrics[parsed_key] = val_to_process
@@ -282,4 +324,4 @@ def execute_comparison_workflow(
                 target_schema, target_table, target_cols_names
             )
     st.success("Comparison workflow executed.")
-    # Results are in st.session_state for app.py to render. 
+    # Results are in st.session_state for app.py to render.

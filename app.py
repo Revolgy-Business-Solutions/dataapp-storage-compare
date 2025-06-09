@@ -584,6 +584,7 @@ st.session_state.attempt_cast_checkbox = st.checkbox("Attempt numeric cast befor
 st.session_state.fetch_full_data_debug = st.checkbox("Fetch Full DataFrames (for debugging/viewing - optional)", value=False, key="fetch_full_data_debug_cb")
 
 if st.button("Check", type="primary", key="check_button"):
+    st.session_state.check_button_pressed = True
     execute_comparison_workflow(
         selected_origin_keboola_table_id_display,
         selected_target_keboola_table_id_display,
@@ -602,7 +603,7 @@ col_round_check, col_round_digits = st.columns([1,3])
 with col_round_check:
     st.checkbox("Round Results?", value=False, key="round_numbers_checkbox", on_change=handle_rounding_change)
 with col_round_digits:
-    st.number_input("Decimal Places", min_value=0, max_value=10, value=3, step=1, key="rounding_digits_input", on_change=handle_rounding_change, disabled=not st.session_state.get('round_numbers_checkbox', False))
+    st.number_input("Decimal Places", min_value=0, max_value=10, value=2, step=1, key="rounding_digits_input", on_change=handle_rounding_change, disabled=not st.session_state.get('round_numbers_checkbox', False))
 
 # --- Display sections for results (populated by execute_comparison_workflow via session_state) ---
 
@@ -641,14 +642,14 @@ if st.session_state.get('origin_agg_queries') or st.session_state.get('target_ag
             st.info("No aggregate queries generated for the target table (check for numeric columns and backend info).")
 
 # Display Fetched Aggregate Results (Raw) if available
-if st.session_state.get('origin_agg_results') or st.session_state.get('target_agg_results'):
+if st.session_state.get('origin_agg_results_raw') or st.session_state.get('target_agg_results_raw'):
     st.subheader("Fetched Aggregate Results (Raw)")
-    if st.session_state.get('origin_agg_results'):
+    if st.session_state.get('origin_agg_results_raw'):
         with st.expander("Origin Aggregate Results (Raw JSON)", expanded=False):
-            st.json(st.session_state.origin_agg_results)
-    if st.session_state.get('target_agg_results'):
+            st.json(st.session_state.origin_agg_results_raw)
+    if st.session_state.get('target_agg_results_raw'):
         with st.expander("Target Aggregate Results (Raw JSON)", expanded=False):
-            st.json(st.session_state.target_agg_results)
+            st.json(st.session_state.target_agg_results_raw)
 
 # Display Full DataFrames (Optional, if fetched)
 if st.session_state.get("fetch_full_data_debug_cb", False): # Check the checkbox state directly
@@ -694,9 +695,9 @@ if st.session_state.get('comparison_results'):
                 target_val = col_data['target_metrics'].get(metric, 'N/A')
                 match_status = col_data['metrics_comparison'].get(f'{metric}_match', False)
                 
-                # Prepare display values, handling potential float precision for display
-                display_origin_val = f"{origin_val:.{st.session_state.rounding_digits_input}f}" if isinstance(origin_val, float) and st.session_state.round_numbers_checkbox else origin_val
-                display_target_val = f"{target_val:.{st.session_state.rounding_digits_input}f}" if isinstance(target_val, float) and st.session_state.round_numbers_checkbox else target_val
+                # Values should already be processed (rounded) by comparison_logic.py
+                display_origin_val = origin_val
+                display_target_val = target_val
                 
                 res_col1.markdown(metric.upper())
                 res_col2.markdown(f"`{display_origin_val}`" + (" ✅" if match_status else " ❌" if display_origin_val != 'N/A' and display_target_val != 'N/A' and not match_status else ""))
