@@ -217,7 +217,18 @@ def get_snowflake_dataframe(sf_host, sf_user, sf_password, sf_database, sf_wareh
         st.error(f"Error fetching data from Snowflake table {sf_database}.{schema_name}.{table_name}: {e}")
         return None
 
+def clean_json_string(json_str: str) -> str:
+    """Clean JSON string by removing control characters and normalizing whitespace."""
+    if not json_str:
+        return ""
+    # Remove control characters except newlines and tabs
+    cleaned = ''.join(char for char in json_str if char >= ' ' or char in '\n\t')
+    # Normalize whitespace
+    cleaned = ' '.join(cleaned.split())
+    return cleaned
+
 def get_bigquery_dataframe(bq_project_id, bq_service_account_json_str, dataset_name, table_name, columns_list):
+    """Get data from BigQuery table and return as a pandas DataFrame."""
     if not all([bq_project_id, bq_service_account_json_str, dataset_name, table_name, columns_list]):
         st.error("Missing BigQuery connection parameters or table details.")
         return None
@@ -225,12 +236,23 @@ def get_bigquery_dataframe(bq_project_id, bq_service_account_json_str, dataset_n
     formatted_columns = ", ".join([f'`{col}`' for col in columns_list])
     query = f'SELECT {formatted_columns} FROM `{bq_project_id}.{dataset_name}.{table_name}`'
     st.info(f"Executing BigQuery query: {query}")
+    
     try:
-        credentials_info = json.loads(bq_service_account_json_str)
+        # Clean and parse service account credentials
+        cleaned_json = clean_json_string(bq_service_account_json_str)
+        credentials_info = json.loads(cleaned_json)
         credentials = service_account.Credentials.from_service_account_info(credentials_info)
+        
+        # Initialize BigQuery client
         bq_client = bigquery.Client(project=bq_project_id, credentials=credentials)
+        
+        # Execute query and convert to DataFrame
         df = bq_client.query(query).to_dataframe()
         return df
+        
+    except json.JSONDecodeError as e:
+        st.error(f"Error parsing service account JSON: {e}\nCleaned JSON string: {cleaned_json}")
+        return None
     except Exception as e:
         st.error(f"Error fetching data from BigQuery table {bq_project_id}.{dataset_name}.{table_name}: {e}")
         return None
@@ -253,16 +275,25 @@ def test_snowflake_connection(host, user, password, database, warehouse):
         return False, f"Snowflake connection failed: {e}"
 
 def test_bigquery_connection(project_id, service_account_json_str):
+    """Test BigQuery connection using service account credentials."""
     if not project_id or not service_account_json_str.strip():
         return False, "BigQuery connection failed: GCP Project ID and Service Account JSON are required."
+    
     try:
-        credentials_info = json.loads(service_account_json_str)
+        # Clean and parse service account credentials
+        cleaned_json = clean_json_string(service_account_json_str)
+        credentials_info = json.loads(cleaned_json)
         credentials = service_account.Credentials.from_service_account_info(credentials_info)
+        
+        # Initialize BigQuery client
         client = bigquery.Client(project=project_id, credentials=credentials)
+        
+        # Test connection with a simple query
         client.query("SELECT 1").result()
         return True, "BigQuery connection successful!"
-    except json.JSONDecodeError:
-        return False, "BigQuery connection failed: Invalid JSON format for service account credentials."
+        
+    except json.JSONDecodeError as e:
+        return False, f"BigQuery connection failed: Invalid JSON format for service account credentials - {e}\nCleaned JSON string: {cleaned_json}"
     except Exception as e:
         return False, f"BigQuery connection failed: {e}"
 
@@ -309,32 +340,22 @@ def generate_aggregate_queries(db_type: str, db_name_or_project_id: str, backend
                 effective_keboola_type = inferred_type_from_other
                 message = f"Info: For column '{col_name}' in {table_identifier_for_logging} ({db_type}), data type '{inferred_type_from_other}' was inferred from the other table (original was UNKNOWN)."
                 inference_messages.append(message)
-                # st.info(message) # Display immediately or collect?
 
         if effective_keboola_type in NUMERIC_KEBOOLA_TYPES:
-            column_expression_for_agg = ""
-            raw_column_identifier = ""
-
             if db_type == "Snowflake":
                 raw_column_identifier = f'"{col_name}"'
-                if attempt_cast and original_type == "UNKNOWN": # Only attempt cast if original was UNKNOWN and we inferred numeric
-                    column_expression_for_agg = f'TRY_CAST({raw_column_identifier} AS NUMBER)'
-                elif attempt_cast: # Standard cast attempt
-                     column_expression_for_agg = f'TRY_CAST({raw_column_identifier} AS NUMBER)'
-                else:
-                    column_expression_for_agg = raw_column_identifier
+                column_expression_for_agg = f'TRY_CAST({raw_column_identifier} AS NUMBER)'
+                full_table_path = f'"{db_name_or_project_id}"."{schema_name}"."{table_name}"'
             elif db_type == "BigQuery":
                 raw_column_identifier = f'`{col_name}`'
-                if attempt_cast and original_type == "UNKNOWN":
-                    column_expression_for_agg = f'SAFE_CAST({raw_column_identifier} AS NUMERIC)'
-                elif attempt_cast:
-                    column_expression_for_agg = f'SAFE_CAST({raw_column_identifier} AS NUMERIC)'
-                else:
-                    column_expression_for_agg = raw_column_identifier
+                # Always use SAFE_CAST for BigQuery to handle potential non-numeric values
+                column_expression_for_agg = f'SAFE_CAST({raw_column_identifier} AS NUMERIC)'
+                full_table_path = f'`{db_name_or_project_id}.{schema_name}.{table_name}`'
             else:
                 st.warning(f"Unsupported database type '{db_type}' for column expression generation.")
                 continue
 
+            # Generate aggregate expressions using the properly cast column expression
             min_agg = f'MIN({column_expression_for_agg}) AS min_{col_name}'
             max_agg = f'MAX({column_expression_for_agg}) AS max_{col_name}'
             avg_agg = f'AVG({column_expression_for_agg}) AS avg_{col_name}'
@@ -354,7 +375,7 @@ def generate_aggregate_queries(db_type: str, db_name_or_project_id: str, backend
                 where_clause = f'WHERE {raw_column_identifier} IS NOT NULL'
                 queries[col_name] = f"SELECT {select_clause} FROM {full_table_path} {where_clause};"
     
-    if not queries and columns_list: # Only show if there were columns but no numeric ones found/inferred
+    if not queries and columns_list:
         st.info(f"No numeric columns identified or inferred for aggregate query generation in table {table_identifier_for_logging} ({db_type}).")
     return queries, inference_messages
 
@@ -363,28 +384,42 @@ def execute_aggregate_query(db_type: str, connection_params: dict, query_string:
     if not query_string:
         return None
     
-    st.info(f"Executing ({db_type}): {query_string}") # Log the query being run
+    st.info(f"Executing ({db_type}): {query_string}")
+    
     try:
         if db_type == "Snowflake":
             conn = snowflake.connector.connect(**connection_params)
-            cursor = conn.cursor(snowflake.connector.DictCursor) # Fetch as dict
+            cursor = conn.cursor(snowflake.connector.DictCursor)
             cursor.execute(query_string)
-            result = cursor.fetchone() # Expecting a single row of aggregates
+            result = cursor.fetchone()
             cursor.close()
             conn.close()
             return result
+            
         elif db_type == "BigQuery":
-            credentials_info = json.loads(connection_params['service_account_json_str'])
+            # Clean and parse service account credentials
+            cleaned_json = clean_json_string(connection_params['service_account_json_str'])
+            credentials_info = json.loads(cleaned_json)
             credentials = service_account.Credentials.from_service_account_info(credentials_info)
+            
+            # Initialize BigQuery client
             bq_client = bigquery.Client(project=connection_params['project_id'], credentials=credentials)
+            
+            # Execute query and get results
             query_job = bq_client.query(query_string)
-            results_iter = query_job.result() # Waits for the job to complete
+            results_iter = query_job.result()
+            
             # Convert to list of dicts, should be one row
             rows = [dict(row) for row in results_iter]
             return rows[0] if rows else None
+            
         else:
             st.error(f"Unsupported database type '{db_type}' for query execution.")
             return None
+            
+    except json.JSONDecodeError as e:
+        st.error(f"Error parsing service account JSON: {e}\nCleaned JSON string: {cleaned_json}")
+        return None
     except Exception as e:
         st.error(f"Error executing {db_type} query \"{query_string}\": {e}")
         return None
