@@ -344,12 +344,15 @@ def generate_aggregate_queries(db_type: str, db_name_or_project_id: str, backend
             select_clause_aggregates = [min_agg, max_agg, avg_agg, sum_agg, count_agg]
             select_clause = ", ".join(select_clause_aggregates)
 
+            # Add WHERE clause to filter out NULL values for numeric columns
             if db_type == "Snowflake":
                 full_table_path = f'"{db_name_or_project_id}"."{schema_name}"."{table_name}"'
-                queries[col_name] = f"SELECT {select_clause} FROM {full_table_path};"
+                where_clause = f'WHERE {raw_column_identifier} IS NOT NULL'
+                queries[col_name] = f"SELECT {select_clause} FROM {full_table_path} {where_clause};"
             elif db_type == "BigQuery":
                 full_table_path = f'`{db_name_or_project_id}.{schema_name}.{table_name}`'
-                queries[col_name] = f"SELECT {select_clause} FROM {full_table_path};"
+                where_clause = f'WHERE {raw_column_identifier} IS NOT NULL'
+                queries[col_name] = f"SELECT {select_clause} FROM {full_table_path} {where_clause};"
     
     if not queries and columns_list: # Only show if there were columns but no numeric ones found/inferred
         st.info(f"No numeric columns identified or inferred for aggregate query generation in table {table_identifier_for_logging} ({db_type}).")
@@ -709,4 +712,4 @@ st.divider()
 # The old placeholder UI from the image (Table 1 status: miss etc.) should be removed if this new dynamic display is complete.
 # with st.container():
 #     st.subheader("Table 1 (status: miss), Matched: 1, Missed: 3")
-# ... (rest of old placeholder) 
+# ... (rest of old placeholder)
